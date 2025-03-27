@@ -1,0 +1,64 @@
+3
+
+void process(int& num){}; // 函式原型，使用參考呼叫的參數
+
+int main() {
+    int i, j; // 宣告整數變數 i 和 j
+
+    i = 10, j = 10; // 分別初始化變數 i 和 j，使用逗號運算子來實現多個初始化
+
+    while (i < 3) {
+        cout << "迴圈開始，i = " << i ;
+
+        if (i == 1) {
+            int innerVar, anotherVar; // 宣告整數變數 innerVar 和 anotherVar
+            anotherVar = 200; // 初始化變數 anotherVar
+            cout << "在 if 條件中宣告的變數 anotherVar = " << anotherVar ;
+        } else {
+            int anotherVar, innerVar; // 宣告整數變數 anotherVar 和 innerVar
+            innerVar = 100; // 初始化變數 innerVar
+            cout << "在 else 條件中宣告的變數 innerVar = " << innerVar ;
+        }
+
+        do {
+            string message; // 宣告字串變數 message
+            message = "Hello"; // 初始化字串變數 message
+            cout << message;
+            i++; // 增加 i 的值
+
+            process(i); // 呼叫函式，修改 i 的值
+
+        } while (i < 2); // 條件滿足時繼續執行 do-while 迴圈
+
+        // 在大括號區塊中宣告變數
+        {
+            float pi; // 宣告浮點數變數 pi
+            pi = 3.14159; // 初始化浮點數變數 pi
+            cout << "在大括號區塊中宣告的變數 pi = " << pi ;
+        }
+
+        i++; // 增加 i 的值
+    }
+
+    return 0;
+}
+
+int a, b;
+a = 0, b = 0;
+if ( a < 10 ) {
+	int inIf;
+}
+
+else inIf = 0;
+
+inIf = 0;
+
+
+
+// 定義函式，使用參考呼叫的方式修改參數的值
+void process(int& num) {
+    num *= 2; // 將參數 num 的值乘以 2
+}
+
+ListFunction("main");
+Done();

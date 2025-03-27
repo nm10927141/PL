@@ -1,0 +1,974 @@
+# include <cstdio>
+# include <cstdlib>
+# include <iostream>
+# include <iomanip>
+# include <string>
+# include <vector>
+# include <deque>
+# include <map>
+
+using namespace std;
+
+string TO_STRING( const int & num ) ;
+string TO_STRING( const double & num ) ;
+
+int   STOI( const string & str ) ;
+float STOF( const string & str ) ;
+
+bool CHAR_IS_SYMBOL( const char & c ) ;
+bool CHAR_IS_NUMBER( const char & c ) ;
+
+bool IS_INTEGER( const string & str ) ;
+bool IS_FLOAT( const string & str ) ;
+bool IS_WHITESPACE( const char & c ) ;  
+bool IS_OPERATOR( const string & str ) ;
+bool IS_VARIABLE( const string & str ) ;
+
+void PRINT_UNEXPECTED( const string & str ) ;
+void PRINT_UNRECOGNIZED( const string & str ) ;
+bool FLOAT_FORMAT_EXCEPTION( const string & str ) ;
+
+# define to_string TO_STRING
+
+# define stoi       STOI
+# define stof       STOF
+
+# define char_is_symbol         CHAR_IS_SYMBOL
+# define char_is_number         CHAR_IS_NUMBER
+
+# define is_symbol              IS_SYMBOL
+# define is_integer             IS_INTEGER
+# define is_float               IS_FLOAT
+# define is_whitespace          IS_WHITESPACE
+# define is_operator            IS_OPERATOR
+# define is_variable            IS_VARIABLE
+# define print_unexpected       PRINT_UNEXPECTED
+# define print_unrecognized     PRINT_UNRECOGNIZED
+# define float_format_exception FLOAT_FORMAT_EXCEPTION
+
+
+# define str      m_str
+# define priority m_priority
+# define rightass m_rightass
+
+class Operator {
+public : 
+  string str;
+  int    priority;
+  bool   rightass; // default are left to right associative, else are inversed
+
+  Operator() {
+    str = "";
+    priority = - 1;
+    rightass = false;
+  } // Operator()
+
+
+  Operator( string s, int p ) {
+    str = s;
+    priority = p;
+    rightass = false;
+  } // Operator()
+
+
+  Operator( string s, int p, bool right_associative ) {
+    str = s;
+    priority = p;
+    rightass = right_associative;
+  } // Operator()
+
+} ;
+
+
+enum DataType {
+  NONE, 
+  ERROR, 
+  OPERATOR, 
+  PARENTHESE, 
+  SYMBOL, 
+  BOOLEAN, 
+  INT, 
+  FLOAT, 
+  STRING, 
+  CHAR
+} ;
+
+
+# define type  m_type
+
+# define set        SET
+# define reset      RESET
+# define is_operand IS_OPERAND
+
+class Token {
+public : 
+  string str;
+  DataType type;
+
+  Token() {
+    reset() ;
+  } // Token()
+
+
+  Token( char & c ) {
+    str = c;
+    type = is_operator( str )     ? OPERATOR    : 
+        c == '(' || c == ')' ? PARENTHESE  : 
+        char_is_number( c )    ? INT         : 
+        char_is_symbol( c )    ? SYMBOL      : 
+        c == '.'             ? FLOAT       : NONE;
+  } // Token()
+
+
+  void SET( string & s, DataType tokenType ) {
+    str = s;
+    type = tokenType;
+  } // SET()
+
+
+  void RESET() {
+    str = "";
+    type = NONE;
+  } // RESET()
+
+
+  bool IS_OPERAND() {
+    return type == SYMBOL || type == INT || type == FLOAT;
+  } // IS_OPERAND()
+
+} ;
+
+# define parse             PARSE
+# define syntaxAnalyze     SyntaxAnalyze
+# define push_token        PUSHTOKEN
+# define commented         COMMENTED
+# define unrecognizedError UNRECOGNIZEDERROR
+# define unexpectedError   UNEXPECTEDERROR
+# define printTokens       PRINTTOKENS
+
+# define code            m_code
+# define tokens          m_tokens
+# define token           m_token
+# define index           m_index
+# define len             m_len
+# define parentheseLevel m_parentheseLevel
+
+vector < Token >         gTokenVector;
+# define TokenVector  gTokenVector
+
+
+
+class Parser {
+public : 
+  string code;
+  vector < vector < Token > > tokens;
+  Token token;
+  int index, len;
+  int parentheseLevel;
+
+  void PARSE( string & inputCode ) {
+    code.swap( inputCode ) ;
+    tokens.resize( 1 ) ;
+    len = code.size() ;
+    parentheseLevel = 0;
+
+    syntaxAnalyze() ;
+  } // PARSE()
+
+
+  void SyntaxAnalyze() {
+    string temp;
+    char c;
+
+    for ( index = 0 ; index < len ; index ++ ) {
+      c = code[index];
+      // cout << c;
+
+      if ( token.str == "" ) {
+        if ( ! is_whitespace( c ) ) {
+          token = Token( c ) ;
+
+          if ( index + 1 < len ) {
+            // check +- is number or operator
+            if ( tokens.back() .empty() || 
+                 ( ( token.str == "+" || token.str == "-" ) && tokens.back() .back() .type == OPERATOR ) ) {
+              if ( char_is_number( code[index + 1] ) ) 
+                token.type = INT;
+
+              if ( code[index + 1] == '.' && index + 2 < len && char_is_number( code[index + 2] ) ) 
+                token.type = FLOAT;
+            } // if
+
+
+            // combine with next character to operator if it would be
+            if ( index + 1 < len && ! token.is_operand() ) {
+              temp = token.str + code[index + 1];
+
+              if ( is_operator( temp ) || temp == "//" ) {
+                token.set( temp, OPERATOR ) ;
+                index ++ ;
+              } // if
+
+            } // if
+
+          } // if
+
+
+
+
+          if ( token.str == "//" ) 
+            commented() ;
+
+          else if ( token.type == NONE && token.str != ";" ) 
+            unrecognizedError() ;
+
+          else if ( ! token.is_operand() ) {
+            if ( push_token() == 1 ) {
+
+              return;
+            } // if
+
+          } // else if
+
+        } // if
+
+      } // if
+
+
+      else {
+        if ( char_is_symbol( c ) && token.type == SYMBOL ) 
+          token.str.push_back( c ) ;
+        
+        else if ( char_is_number( c ) && ( token.type == INT || token.type == FLOAT ) ) 
+          token.str.push_back( c ) ;
+
+        else if ( c == '.' && token.type == INT ) {
+          token.str.push_back( c ) ;
+          token.type = FLOAT;
+        } // else if
+
+        else {
+          if ( push_token() == 1 ) 
+            return;
+          -- index;
+        } // else
+
+      } // else
+
+    } // for
+
+
+    if ( token.type != NONE ) {
+      if ( push_token() == 1 ) 
+        return;
+    } // if
+
+  } // SyntaxAnalyze()
+
+
+  int PUSHTOKEN() {
+    bool error = false;
+    Token prevToken;
+
+    // for(int y = 0 ; y < tokens.back().size() ; y++)
+    //    cout <<"'"<< tokens.back()[y].str <<"'"<<" ";
+    // cout << "<< '" <<  token.str << "'\n";
+
+    if ( ! tokens.back() .empty() ) 
+      prevToken = tokens.back() .back() ;
+    else
+      prevToken.reset() ;
+
+
+    // Unexpected token: X (
+    if ( token.str == "(" && prevToken.type != OPERATOR && prevToken.str != "" && prevToken.str != "(" ) 
+      return unexpectedError() ;
+
+    // Unexpected token: X )
+    if ( token.str == ")" && ! prevToken.is_operand() && prevToken.str != ")" ) 
+      return unexpectedError() ;
+
+    // Unexpected token: parentheses level
+    if ( token.type == PARENTHESE ) {
+      parentheseLevel += ( token.str == "(" ? 1 : - 1 ) ;
+      if ( parentheseLevel < 0 ) 
+        return unexpectedError() ;
+    } // if
+
+      
+    // Unexpected token: continuous operator
+    if ( token.type == OPERATOR && prevToken.type == OPERATOR ) 
+      return unexpectedError() ;
+      
+    // Unexpected token: continuous symbol or number tokens
+    if ( token.is_operand() && prevToken.is_operand() ) 
+      return unexpectedError() ;
+
+    // Functional token
+    if ( token.str == ";" ) {
+      if ( tokens.back() .empty() ) {
+        return unexpectedError() ;
+      } // if
+
+      
+      tokens.push_back( TokenVector ) ;
+      token.reset() ;
+      return 0;
+    } // if
+
+
+    if ( token.str == "quit" && tokens.back() .empty() ) {
+      token.str = "Program exits...";
+      token.type = ERROR;
+      tokens.back() .push_back( token ) ;
+      return 1;
+    } // if
+
+
+    // Expected
+    tokens.back() .push_back( token ) ;
+    token.reset() ;
+
+
+    // cout << "dddd\n";
+
+    return 0;
+  } // PUSHTOKEN()
+
+
+  void COMMENTED() {
+    token.reset() ;
+    while ( index < len && code[index] != '\n' ) 
+      index ++ ;
+  } // COMMENTED()
+
+
+  int UNRECOGNIZEDERROR() {
+    token.str = "Unrecognized token with first char : '" + token.str.substr( 0, 1 ) + "'";
+    token.type = ERROR;
+    tokens.back() .push_back( token ) ;
+    parentheseLevel = 0;
+    tokens.push_back( TokenVector ) ;
+    commented() ;
+    return - 1;
+  } // UNRECOGNIZEDERROR()
+
+
+  int UNEXPECTEDERROR() {
+    token.str = "Unexpected token : '" + token.str + "'";
+    token.type = ERROR;
+    tokens.back() .push_back( token ) ;
+    parentheseLevel = 0;
+    tokens.push_back( TokenVector ) ;
+    commented() ;
+    return - 2;
+  } // UNEXPECTEDERROR()
+
+
+
+  void PRINTTOKENS() {
+    int x, y;
+    int xl, yl;
+
+    xl = tokens.size() ;
+    for ( x = 0 ; x < xl ; x ++ ) {
+      yl = tokens[x].size() ;
+      for ( y = 0 ; y < yl ; y ++ ) 
+        cout << "'" << tokens[x][y].str << "' ";
+      cout << '\n';
+    } // for
+
+  } // PRINTTOKENS()
+
+} ;
+
+# define i m_i
+# define f m_f
+
+# define printData PRINTDATA
+
+ // Handle of Token & Data processing
+class Data {
+public : 
+  DataType type;
+  string str;
+  int i;
+  float f;
+
+  Data() {
+    type = NONE;
+    str = "";
+    i = 0;
+    f = 0;
+  } // Data()
+
+
+  Data( Token token ) {
+    type = token.type;
+
+    if ( type == INT ) 
+      f = i = stoi( token.str ) ;
+    else if ( type == FLOAT ) 
+      i = f = stof( token.str ) ;
+    
+    str = token.str;
+  } // Data()
+
+
+  Data( string op ) {
+    type = OPERATOR;
+    str = op;
+  } // Data()
+
+
+  Data( float val ) {
+    type = FLOAT;
+    i = f = val;
+  } // Data()
+
+
+  Data( int val ) {
+    type = INT;
+    f = i = val;
+  } // Data()
+
+
+  Data( bool val ) {
+    type = BOOLEAN;
+    f = i = val;
+  } // Data()
+
+
+  bool IS_OPERAND() {
+    return type == SYMBOL || type == INT || type == FLOAT;
+  } // IS_OPERAND()
+
+
+  // string debugInfo(){
+  //    return "(" + to_string(type) + ")'" + str + "'[" + to_string(i) + "]" + "[" + to_string(f) + "]";
+  // }
+
+  void PRINTDATA() {
+    if ( type == BOOLEAN ) 
+      cout << ( i == 1 ? "true" : "false" ) ;
+    else if ( type == INT ) 
+      cout << i;
+    else if ( type == FLOAT ) {
+      // cout << "float : ";
+      cout << fixed << setprecision( 3 ) << f;
+    } // else if
+
+
+    else if ( type == ERROR ) {
+      if ( i == - 1 ) 
+        cout << "Unexpected token : ':='";
+      else
+        cout << "Undefined identifier : '" << str << "'";
+    } // else if
+
+  } // PRINTDATA()
+
+} ;
+
+map < string, Data >     gVariables;
+map < string, Operator > gOperators;
+# define Variables    gVariables
+# define Operators    gOperators
+
+# define operands m_operands
+
+# define push_operand       PUSH_OPERAND
+# define operate            OPERATE
+# define resolve_operand_2  RESOLVEOPRD2
+# define resolve_operand    RESOLVEOPRD
+# define operand_2          OPERAND2
+# define mul    MUL
+# define div    DIV
+# define add    ADD
+# define sub    SUB
+# define gt     GT
+# define lt     LT
+# define ge     GE
+# define le     LE
+# define eq     EQ
+# define neq    NEQ
+# define assign ASSIGN
+
+
+class Evaluator {
+public : 
+  deque < Data > operands;
+
+  void RESET() {
+    operands.clear() ;
+  } // RESET()
+
+
+  void PUSH_OPERAND( Data & operand ) {
+    operands.push_back( operand ) ;
+  } // PUSH_OPERAND()
+
+  
+  void OPERATE( string & op ) {
+    Data result = op == "*"  ? mul( operand_2() ) : 
+           op == "/"  ? div( operand_2() ) : 
+           op == "+"  ? add( operand_2() ) : 
+           op == "-"  ? sub( operand_2() ) : 
+           op == ">"  ? gt( operand_2() )  : 
+           op == "<"  ? lt( operand_2() )  : 
+           op == ">=" ? ge( operand_2() )  : 
+           op == "<=" ? le( operand_2() )  : 
+           op == "="  ? eq( operand_2() )  : 
+           op == "<>" ? neq( operand_2() ) : 
+           op == ":=" ? assign( operand_2() ) : Data() ;
+
+    operands.push_back( result ) ;
+  } // OPERATE()
+
+
+
+  pair < Data, Data > OPERAND2() {
+    pair < Data, Data > result;
+
+    result.second = operands.back() ;
+    operands.pop_back() ;
+    result.first = operands.back() ;
+    operands.pop_back() ;
+
+    return result;
+  } // OPERAND2()
+
+
+  bool RESOLVEOPRD( Data & operand ) {
+    if ( operand.type == SYMBOL ) {
+      if ( is_variable( operand.str ) ) 
+        operand = Variables[operand.str];
+      
+      else {
+        operand.type = ERROR;
+        return false;
+      } // else
+
+    } // if
+
+
+    return true;
+  } // RESOLVEOPRD()
+
+
+  bool RESOLVEOPRD2( pair < Data, Data > & param ) {
+    return resolve_operand( param.first ) && resolve_operand( param.second ) ;
+  } // RESOLVEOPRD2()
+
+
+  Data MUL( pair < Data, Data > param ) {
+    if ( ! resolve_operand_2( param ) ) 
+      return param.first.type == ERROR ? param.first : param.second;
+
+    if ( param.first.type == INT && param.second.type == INT ) 
+      return Data( param.first.i * param.second.i ) ;
+    
+    return Data( param.first.f * param.second.f ) ;
+  } // MUL()
+
+
+  Data DIV( pair < Data, Data > param ) {
+    if ( ! resolve_operand_2( param ) ) 
+      return param.first.type == ERROR ? param.first : param.second;
+
+    if ( param.first.type == INT && param.second.type == INT ) 
+      return Data( param.first.i / param.second.i ) ;
+
+    return Data( param.first.f / param.second.f ) ;
+  } // DIV()
+
+
+  Data ADD( pair < Data, Data > param ) {
+    if ( ! resolve_operand_2( param ) ) 
+      return param.first.type == ERROR ? param.first : param.second;
+
+    if ( param.first.type == INT && param.second.type == INT ) 
+      return Data( param.first.i + param.second.i ) ;
+
+    return Data( param.first.f + param.second.f ) ;
+  } // ADD()
+
+
+  Data SUB( pair < Data, Data > param ) {
+    if ( ! resolve_operand_2( param ) ) 
+      return param.first.type == ERROR ? param.first : param.second;
+
+    if ( param.first.type == INT && param.second.type == INT ) 
+      return Data( param.first.i - param.second.i ) ;
+
+    return Data( param.first.f - param.second.f ) ;
+  } // SUB()
+
+
+  Data GT( pair < Data, Data > param ) {
+    if ( ! resolve_operand_2( param ) ) 
+      return param.first.type == ERROR ? param.first : param.second;
+
+    if ( param.first.type == INT && param.second.type == INT ) 
+      return Data( param.first.i > param.second.i ) ;
+
+    return Data( param.first.f > param.second.f ) ;
+  } // GT()
+
+
+  Data LT( pair < Data, Data > param ) {
+    if ( ! resolve_operand_2( param ) ) 
+      return param.first.type == ERROR ? param.first : param.second;
+
+    if ( param.first.type == INT && param.second.type == INT ) 
+      return Data( param.first.i < param.second.i ) ;
+
+    return Data( param.first.f < param.second.f ) ;
+  } // LT()
+
+
+  Data GE( pair < Data, Data > param ) {
+    if ( ! resolve_operand_2( param ) ) 
+      return param.first.type == ERROR ? param.first : param.second;
+
+    if ( param.first.type == INT && param.second.type == INT ) 
+      return Data( param.first.i >= param.second.i ) ;
+
+    return Data( param.first.f >= param.second.f ) ;
+  } // GE()
+
+
+  Data LE( pair < Data, Data > param ) {
+    if ( ! resolve_operand_2( param ) ) 
+      return param.first.type == ERROR ? param.first : param.second;
+
+    if ( param.first.type == INT && param.second.type == INT ) 
+      return Data( param.first.i <= param.second.i ) ;
+
+    return Data( param.first.f <= param.second.f ) ;
+  } // LE()
+
+
+  Data EQ( pair < Data, Data > param ) {
+    if ( ! resolve_operand_2( param ) ) 
+      return param.first.type == ERROR ? param.first : param.second;
+
+    if ( param.first.type == INT && param.second.type == INT ) 
+      return Data( param.first.i == param.second.i ) ;
+
+    return Data( param.first.f == param.second.f ) ;
+  } // EQ()
+
+
+  Data NEQ( pair < Data, Data > param ) {
+    if ( ! resolve_operand_2( param ) ) 
+      return param.first.type == ERROR ? param.first : param.second;
+
+    if ( param.first.type == INT && param.second.type == INT ) 
+      return Data( param.first.i != param.second.i ) ;
+
+    return Data( param.first.f != param.second.f ) ;
+  } // NEQ()
+
+
+  Data ASSIGN( pair < Data, Data > param ) {
+    if ( param.first.type != SYMBOL ) {
+      param.first.type = ERROR;
+      param.first.i = - 1;
+      return param.first;    
+    } // if
+
+
+    if ( ! resolve_operand( param.second ) ) 
+      return param.second;
+
+    return Variables[param.first.str] = param.second;
+  } // ASSIGN()
+
+} ;
+
+# define parser    m_parser
+# define evaluator m_evaluator
+
+# define execute   EXECUTE
+# define suffix_expression Suffix_expression
+# define evaluate  EVALUATE
+# define printExpression PrintExpression
+
+class Interpreter {
+public : 
+  Parser parser;
+  Evaluator evaluator;
+
+  void EXECUTE( string & code ) {
+    parser.parse( code ) ;
+    // parser.printTokens();
+
+    for ( int x = 0 ; x < parser.tokens.size() ; x ++ ) {
+      cout << "> ";
+      if ( parser.tokens[x].back() .type == ERROR ) 
+        cout << parser.tokens[x].back() .str;
+
+      else {
+        deque < Data > exp = suffix_expression( parser.tokens[x] ) ;
+        // printExpression(exp);
+        evaluate( exp ) .printData() ;
+      } // else
+
+      cout << "\n";
+      
+    } // for
+
+  } // EXECUTE()
+
+
+  deque < Data > Suffix_expression( vector < Token > & tokens ) { // make suffix expression
+    int x, l = tokens.size() ;
+    Token token;
+    Operator op;
+    deque < Data > buffer;
+    deque < Data > expression;
+    deque < Operator > opstack;
+    Data tempData;
+    
+    for ( x = 0 ; x < l ; x ++ ) {
+      token = tokens[x];
+
+      if ( token.is_operand() ) {
+        tempData = Data( tokens[x] ) ;
+        expression.push_back( tempData ) ;
+      } // if
+
+      else {
+        if ( token.str == "(" ) {
+          op = Operator( "(", 99 ) ;
+          opstack.push_back( op ) ;
+        } // if
+
+        
+        else if ( token.str == ")" ) {
+          while ( ! opstack.empty() && opstack.back() .str != "(" ) {
+            tempData = Data( opstack.back() .str ) ;
+            expression.push_back( tempData ) ;
+            opstack.pop_back() ;
+          } // while
+
+
+          opstack.pop_back() ;
+        } // else if
+
+        else if ( token.type == OPERATOR ) {
+          op = Operators[token.str];
+          
+          while ( ! opstack.empty() && op.priority >= opstack.back() .priority ) {
+            tempData = Data( opstack.back() .str ) ;
+            expression.push_back( tempData ) ;
+            opstack.pop_back() ;
+          } // while
+
+
+          opstack.push_back( op ) ;
+        } // else if
+
+      } // else
+
+    } // for
+
+
+    while ( ! opstack.empty() ) {
+      tempData = Data( opstack.back() .str ) ;
+      expression.push_back( tempData ) ;
+      opstack.pop_back() ;
+    } // while
+
+
+    return expression;
+  } // Suffix_expression()
+
+  Data EVALUATE( deque < Data > & exp ) {
+    string op;
+    evaluator.reset() ;
+      
+    while ( ! exp.empty() ) {
+      if ( exp.front() .is_operand() ) 
+        evaluator.push_operand( exp.front() ) ;
+      else 
+        evaluator.operate( exp.front() .str ) ;
+
+      exp.pop_front() ;
+    } // while
+
+
+    return evaluator.operands.front() ;
+  } // EVALUATE()
+
+
+  void PrintExpression( deque < Data > & exp ) {
+    for ( Data data : exp ) {
+      cout << "'" << data.str << "' ";
+    } // for
+
+    cout << '\n';
+  } // PrintExpression()
+
+} ;
+
+
+
+
+
+void TableSetup() {
+  Operators[ "*"]  = Operator( "*",  5 ) ;
+  Operators[ "/"]  = Operator( "/",  5 ) ;
+
+  Operators[ "+"]  = Operator( "+",  6 ) ;
+  Operators[ "-"]  = Operator( "-",  6 ) ;
+
+  Operators[ ">"]  = Operator( ">",  9 ) ;
+  Operators[ "<"]  = Operator( "<",  9 ) ;
+  Operators[ ">="] = Operator( ">=", 9 ) ;
+  Operators[ "<="] = Operator( "<=", 9 ) ;
+
+  Operators[ "="]  = Operator( "=",  10 ) ;
+  Operators[ "<>"] = Operator( "<>", 10 ) ;
+
+  Operators[ ":="] = Operator( ":=", 17, true ) ;
+} // TableSetup()
+
+
+
+
+
+
+int main() {
+  // freopen( "testcases/input/proj1-last-2.txt", "r", stdin ) ;
+  // freopen("output.txt", "w", stdout);
+  
+  Interpreter interpreter;
+  char c;
+  string code;
+  string testNumber;
+
+  TableSetup() ;
+  cout << "Program starts...\n";
+
+  while ( scanf( "%c", & c ) != EOF && c != '\n' ) 
+    testNumber.push_back( c ) ;
+
+  while ( scanf( "%c", & c ) != EOF ) 
+    code.push_back( c ) ;
+
+  interpreter.execute( code ) ;
+} // main()
+
+
+
+
+
+
+string TO_STRING( const int & num ) {
+  char str[50];
+  sprintf( str, "%d", num ) ;
+  return string( str ) ;
+} // TO_STRING()
+
+
+string TO_STRING( const double & num ) {
+  char str[50];
+  sprintf( str, "%.3f", num ) ;
+  return string( str ) ;
+} // TO_STRING()
+
+
+int STOI( const string & str ) {
+  return atoi( str.c_str() ) ;
+} // STOI()
+
+
+float STOF( const string & str ) {
+  return atof( str.c_str() ) ;
+} // STOF()
+
+
+bool CHAR_IS_SYMBOL( const char & c ) {
+  return ( 'a' <= c && c <= 'z' ) || ( 'A' <= c && c <= 'Z' ) 
+      || c == '_' || ( '0' <= c && c <= '9' ) ;
+} // CHAR_IS_SYMBOL()
+
+
+bool CHAR_IS_NUMBER( const char & c ) {
+  return '0' <= c && c <= '9';
+} // CHAR_IS_NUMBER()
+
+
+bool IS_SYMBOL( const string & str ) {
+  char c;
+
+  if ( '0' <= str[0] && str[0] <= '9' ) 
+    return false;
+
+  for ( int x = 0, l = str.size() ; x < l ; x ++ ) {
+    c = str[x];
+    if ( ! ( ( 'a' <= c && c <= 'z' ) || ( 'A' <= c && c <= 'Z' ) 
+             || c == '_' || ( '0' <= c && c <= '9' ) ) ) 
+      return false;
+  } // for
+
+
+  return true;
+} // IS_SYMBOL()
+
+
+bool IS_INTEGER( const string & str ) {
+  int x = 0, l = str.size() ;
+
+  for ( x = ( str[0] == '+' || str[0] == '-' ) ; x < l ; x ++ ) 
+    if ( str[x] < '0' || str[x] > '9' ) 
+      return false;
+
+  return true;
+} // IS_INTEGER()
+
+
+bool IS_FLOAT( const string & str ) {
+  if ( str == "+." || str == "-." ) 
+    return false;
+
+  int x = 0, l = str.size() ;
+
+  for ( x = ( str[0] == '+' || str[0] == '-' ) ; str[x] != '.' && x < l ; x ++ ) 
+    if ( str[x] < '0' || str[x] > '9' ) 
+      return false;
+
+  for ( ++ x ; x < l ; x ++ ) 
+    if ( str[x] < '0' || str[x] > '9' ) 
+      return false;
+
+  return true;
+} // IS_FLOAT()
+
+
+bool IS_WHITESPACE( const char & c ) {
+  return ( c == ' ' || c == '\t' || c == '\n' ) ;
+} // IS_WHITESPACE()
+
+
+bool IS_OPERATOR( const string & str ) {
+  return Operators.find( str ) != Operators.end() ;
+} // IS_OPERATOR()
+
+
+bool IS_VARIABLE( const string & str ) {
+  return Variables.find( str ) != Variables.end() ;
+} // IS_VARIABLE()
+
+
+void PRINT_UNEXPECTED( const string & str ) {
+  cout << "Unexpected token : '" << str << "'";
+} // PRINT_UNEXPECTED()
+
+
+void PRINT_UNRECOGNIZED( const string & str ) {
+  cout << "Unrecognized token with first char : '" << str[0] << "'";
+} // PRINT_UNRECOGNIZED()
+
