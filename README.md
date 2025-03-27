@@ -1,7 +1,8 @@
 # PL
 
 這支程式完成到OurC proj2 
-可以參考 proj1.cpp proj2.cpp這兩個檔案
+
+可以參考 proj1.cpp proj2.cpp
 
 關於參考文件如下：
 
